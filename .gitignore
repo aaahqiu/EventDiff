@@ -1,0 +1,50 @@
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+.coverage
+.coverage.*
+htmlcov/
+
+# virtual environments
+.venv/
+venv/
+env/
+
+# packaging / build
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# notebooks / local metadata
+.ipynb_checkpoints/
+.DS_Store
+
+# editors / local tooling
+.vscode/
+.idea/
+.agents/
+.codex/
+
+# logs
+*.log
+
+# training outputs
+outputs*/
+runs/
+wandb/
+checkpoints/
+
+# model checkpoints / arrays
+*.pt
+*.pth
+*.ckpt
+*.npz
+*.npy
+
+# rendered media
+*.avi
+*.mp4
