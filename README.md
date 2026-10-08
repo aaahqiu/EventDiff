@@ -21,6 +21,14 @@ It also keeps the EventVAE data specializations:
 - default frozen spatial EventVAE latent codec from
   `/data4/tkp/Code/EventVAE/outputs_latent64/best.pt`.
 
+## Branch Scope
+
+The `main` branch contains only the core EventDiff implementation needed for
+training, per-epoch validation, checkpoint selection, and held-out evaluation.
+Paper experiments, comparison baselines, ablations, and report-generation tools
+live on the `exp` branch. Datasets, cached latents, model weights, and generated
+results are intentionally excluded from version control on both branches.
+
 ## Files
 
 - `event_diff/data.py`: MPH voxel discovery, splitting, mmap sequence dataset.
@@ -29,8 +37,10 @@ It also keeps the EventVAE data specializations:
 - `event_diff/model.py`: spatio-temporal 3D UNet denoiser.
 - `event_diff/diffusion.py`: E-Motion-style EDM loss and sampler.
 - `event_diff/visualize.py`: signed event visualization and AVI export.
-- `train.py`: training entry point.
-- `test.py`: sampling/evaluation with `.npz`, image, and video outputs.
+- `train.py`: training entry point with a validation pass after every epoch;
+  saves `last.pt` and the best-validation-loss checkpoint as `best.pt`.
+- `test.py`: held-out sampling and quantitative validation/evaluation with
+  optional `.npz`, image, and video outputs.
 
 ## Train
 
@@ -80,7 +90,11 @@ to train the older event-history-only model. The power values are normalized
 from `[--laser-power-min, --laser-power-max]` to `[-1, 1]`; the current MPH
 data spans `0` to `200`.
 
-## Test And Visualize
+## Validate And Evaluate
+
+Training automatically evaluates the validation split after every epoch and
+uses its loss to select `best.pt`. To evaluate that checkpoint on the held-out
+test split and optionally render qualitative results:
 
 ```bash
 python test.py \

@@ -37,14 +37,50 @@ outputs*/
 runs/
 wandb/
 checkpoints/
+paper_results/
+results/
+figures/
+plots/
 
-# model checkpoints / arrays
+# model checkpoints / exported models
 *.pt
 *.pth
 *.ckpt
+*.safetensors
+*.onnx
+*.pb
+*.joblib
+
+# datasets / derived data / caches
+data/
+dataset/
+datasets/
+raw_data/
+processed_data/
+cache/
+caches/
+latents/
+*_cache/
 *.npz
 *.npy
+*.h5
+*.hdf5
+*.mat
+*.pkl
+*.pickle
+*.parquet
+*.feather
+*.csv
+*.tsv
+*.bin
+*.dat
+paper_split.json
+paper_condition_coverage.json
 
-# rendered media
+# rendered result media
 *.avi
 *.mp4
+*.png
+*.jpg
+*.jpeg
+*.gif
