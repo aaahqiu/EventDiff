@@ -1,14 +1,13 @@
-# EventDiff
+# EventDiff: **Process-Conditioned Diffusion for Forecasting Melt-Pool Dynamics via Event-based Sensing in Laser Wire Directed Energy Deposition**
 
-Official research code for **“Process-Conditioned Diffusion for Forecasting
-Melt-Pool Dynamics via Event-based Sensing in Laser Wire Directed Energy
-Deposition.”**
-
-EventDiff forecasts future melt-pool event-voxel sequences from recent event
-observations and a time-aligned laser-power trajectory. It is designed for
-predictive monitoring of laser wire directed energy deposition (LW-DED),
-including steady deposition, laser activation/deactivation, and power
-transitions.
+EventDiff is a process-conditioned latent diffusion framework with
+**prefix-guided sampling** for forecasting future melt-pool event-voxel
+sequences. It combines recent event observations with a time-aligned
+laser-power trajectory, while measured prefix frames constrain the early
+reverse-diffusion steps to keep the forecast consistent with the realized
+melt-pool evolution. The method is designed for predictive monitoring of laser
+wire directed energy deposition (LW-DED), including steady deposition, laser
+activation/deactivation, and power transitions.
 
 ## Method
 
@@ -133,21 +132,6 @@ normalized and original-domain errors, activity statistics, and optionally
 saves compressed predictions, comparison images, and videos. Prefix-guided
 sampling is controlled with `--known-future-frames` and
 `--event-guided-steps`.
-
-## Paper Configuration
-
-The main settings used in the paper are:
-
-- event voxels with 3 temporal channels at `512 × 512` resolution;
-- 3 observation frames and 25 prediction frames;
-- frozen EventVAE posterior means with `16 × 64 × 64` latent maps;
-- AdamW, mixed precision, gradient clipping, and validation-based checkpoint
-  selection;
-- 25-step Euler sampling with a Karras noise schedule and classifier-free
-  guidance.
-
-Hardware capacity and dataset locations are environment-specific; adjust batch
-size and worker count without editing source files.
 
 ## Citation
 
