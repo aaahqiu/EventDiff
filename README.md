@@ -1,28 +1,40 @@
 # EventDiff: **Process-Conditioned Diffusion for Forecasting Melt-Pool Dynamics via Event-based Sensing in Laser Wire Directed Energy Deposition**
 
-EventDiff is a process-conditioned latent diffusion framework with
-**prefix-guided sampling** for forecasting future melt-pool event-voxel
-sequences. It combines recent event observations with a time-aligned
-laser-power trajectory, while measured prefix frames constrain the early
-reverse-diffusion steps to keep the forecast consistent with the realized
-melt-pool evolution. The method is designed for predictive monitoring of laser
-wire directed energy deposition (LW-DED), including steady deposition, laser
-activation/deactivation, and power transitions.
+Accurate forecasting of melt-pool evolution is an important step from process
+monitoring toward predictive control in laser wire directed energy deposition
+(LW-DED). EventDiff is a latent diffusion framework for forecasting future
+melt-pool dynamics from event-based observations. It combines the recent event
+history with the time-aligned laser-power trajectory so that the prediction
+reflects both the current process state and the imposed operating condition.
+
+The framework consists of EventVAE for compact representation of sparse event
+voxels and EventDiff for latent-space sequence forecasting. It is designed for
+steady deposition as well as transient conditions such as laser activation,
+deactivation, and power increase or decrease. The predicted representations
+can also be used by downstream models, including deposited-track height
+prediction.
 
 ## Method
 
-EventDiff follows a two-stage latent forecasting framework:
+The asynchronous event stream is first consolidated into a sequence of fixed
+size event voxels. A signed-log transform compresses the heavy-tailed voxel
+values before encoding. EventVAE preserves the spatial organization of the
+melt-pool response in a compact latent map; after pretraining, its parameters
+are frozen and the posterior mean is used as the deterministic event
+representation.
 
-1. **EventVAE** encodes sparse event voxels into compact spatial latent maps.
-   The pretrained encoder is frozen during diffusion training.
-2. **EventDiff** predicts the future latent sequence with an EDM-style
-   process-conditioned 3D U-Net, then decodes it back to event voxels.
+EventDiff models the future sequence in this latent space. The laser-power
+curve over the observation and prediction interval describes the external
+process input, while the recent event latents describe the melt-pool state from
+which the forecast begins. A process-conditioned 3D U-Net is trained with an
+EDM objective to denoise the perturbed future latents using both sources of
+information. The predicted latents are finally decoded by EventVAE to recover
+the future event-voxel sequence.
 
-The denoiser is conditioned jointly on recent event history and the aligned
-laser-power curve. At inference time, optional measured prefix frames can be
-inserted during early reverse-diffusion steps to anchor the generated sequence
-to the observed process while preserving stochasticity in the remaining
-future.
+When initial frames inside the prediction interval have already been measured,
+they can be incorporated as a prefix constraint during inference to maintain
+continuity with the observed evolution. The remaining sequence is still
+generated probabilistically to represent unobserved process variability.
 
 The paper uses 3 historical event voxels to forecast 25 future voxels at 40 ms
 intervals, corresponding to a 1 s prediction horizon. Experiments cover 60
