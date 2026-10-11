@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Any
 
@@ -11,7 +12,9 @@ import torch.nn.functional as F
 from event_diff.autoencoder import ConvVAE
 
 
-DEFAULT_VAE_CHECKPOINT = Path("/data4/tkp/Code/EventVAE/outputs_latent64/best.pt")
+DEFAULT_VAE_CHECKPOINT = Path(
+    os.environ.get("EVENTDIFF_VAE_CHECKPOINT", "checkpoints/eventvae/best.pt")
+).expanduser()
 
 
 class LatentCodec:

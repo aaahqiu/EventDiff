@@ -1,117 +1,165 @@
 # EventDiff
 
-EventDiff is a compact event-voxel future-sequence diffusion implementation for
-recording folders under `/data4/tkp/MPH-Data/voxel_output`.
-Each folder is expected to contain `voxel_grid.npy` and
-`laser_power_per_frame.npy`.
+Official research code for **“Process-Conditioned Diffusion for Forecasting
+Melt-Pool Dynamics via Event-based Sensing in Laser Wire Directed Energy
+Deposition.”**
 
-It follows the useful parts of E-Motion for this data:
+EventDiff forecasts future melt-pool event-voxel sequences from recent event
+observations and a time-aligned laser-power trajectory. It is designed for
+predictive monitoring of laser wire directed energy deposition (LW-DED),
+including steady deposition, laser activation/deactivation, and power
+transitions.
 
-- condition on a short event history and generate future event frames;
-- encode the aligned laser-power curve as an additional diffusion condition;
-- train with the E-Motion/EDM log-normal sigma objective;
-- concatenate a repeated condition latent to noisy target latents;
-- support classifier-free guidance and event-guided known-prefix sampling.
+## Method
 
-It also keeps the EventVAE data specializations:
+EventDiff follows a two-stage latent forecasting framework:
 
-- memory-mapped `.npy` loading for large recordings;
-- recording-level train/val/test split;
-- signed-log normalization for heavy-tailed event values;
-- default frozen spatial EventVAE latent codec from
-  `/data4/tkp/Code/EventVAE/outputs_latent64/best.pt`.
+1. **EventVAE** encodes sparse event voxels into compact spatial latent maps.
+   The pretrained encoder is frozen during diffusion training.
+2. **EventDiff** predicts the future latent sequence with an EDM-style
+   process-conditioned 3D U-Net, then decodes it back to event voxels.
 
-## Branch Scope
+The denoiser is conditioned jointly on recent event history and the aligned
+laser-power curve. At inference time, optional measured prefix frames can be
+inserted during early reverse-diffusion steps to anchor the generated sequence
+to the observed process while preserving stochasticity in the remaining
+future.
 
-The `main` branch contains only the core EventDiff implementation needed for
-training, per-epoch validation, checkpoint selection, and held-out evaluation.
-Paper experiments, comparison baselines, ablations, and report-generation tools
-live on the `exp` branch. Datasets, cached latents, model weights, and generated
-results are intentionally excluded from version control on both branches.
+The paper uses 3 historical event voxels to forecast 25 future voxels at 40 ms
+intervals, corresponding to a 1 s prediction horizon. Experiments cover 60
+independent recordings and 12 constant or time-varying laser-power conditions.
 
-## Files
+## Repository Structure
 
-- `event_diff/data.py`: MPH voxel discovery, splitting, mmap sequence dataset.
-- `event_diff/autoencoder.py`: EventVAE architecture for checkpoint loading.
-- `event_diff/codec.py`: frozen VAE or raw normalized latent codec.
-- `event_diff/model.py`: spatio-temporal 3D UNet denoiser.
-- `event_diff/diffusion.py`: E-Motion-style EDM loss and sampler.
-- `event_diff/visualize.py`: signed event visualization and AVI export.
-- `train.py`: training entry point with a validation pass after every epoch;
-  saves `last.pt` and the best-validation-loss checkpoint as `best.pt`.
-- `test.py`: held-out sampling and quantitative validation/evaluation with
-  optional `.npz`, image, and video outputs.
+```text
+event_diff/
+  autoencoder.py   EventVAE architecture used to load pretrained weights
+  codec.py         frozen EventVAE and raw-latent codecs
+  data.py          recording discovery, splitting, and sequence loading
+  model.py         process-conditioned EventDiff denoiser
+  diffusion.py     EDM training objective and sampler
+  utils.py         distributed training and checkpoint utilities
+  visualize.py     event-sequence visualization
+train.py           training and per-epoch validation
+test.py            held-out evaluation, sampling, and visualization
+train.sh           configurable distributed-training launcher
+```
 
-## Train
+Datasets, checkpoints, cached arrays, and generated results are intentionally
+excluded from version control.
+
+## Installation
+
+Python 3.10 or later is recommended.
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+For GPU training, install a PyTorch build compatible with the local CUDA
+installation.
+
+## Data and EventVAE Checkpoint
+
+Each recording should use the following layout:
+
+```text
+data/voxel_output/
+  recording_001/
+    voxel_grid.npy               # (T, C, H, W) or (T, H, W, C)
+    laser_power_per_frame.npy    # (T,)
+  recording_002/
+    ...
+
+checkpoints/eventvae/
+  best.pt
+```
+
+These relative locations are the defaults. Custom locations can be configured
+without modifying the source:
+
+```bash
+export EVENTDIFF_DATA_DIR=/path/to/voxel_output
+export EVENTDIFF_VAE_CHECKPOINT=/path/to/eventvae/best.pt
+```
+
+Recordings are divided into training, validation, and test subsets before
+window construction, preventing windows from one deposition track from leaking
+across subsets. The selected split is stored in the training output directory.
+
+## Training
 
 ```bash
 python train.py \
-  --data-dir /data4/tkp/MPH-Data/voxel_output \
-  --vae-checkpoint /data4/tkp/Code/EventVAE/outputs_latent64/best.pt \
-  --output-dir outputs_motion \
+  --data-dir "$EVENTDIFF_DATA_DIR" \
+  --vae-checkpoint "$EVENTDIFF_VAE_CHECKPOINT" \
+  --output-dir outputs/eventdiff \
   --cond-frames 3 \
   --pred-frames 25 \
-  --use-laser-power \
-  --laser-power-max 200 \
   --batch-size 1 \
   --epochs 50
 ```
 
-Single-node multi-GPU training with `torchrun`:
+Training supports mixed precision, classifier-free guidance, checkpoint resume,
+and single-node distributed data parallelism. A validation pass is performed
+after every epoch; `last.pt` stores the latest state and `best.pt` stores the
+checkpoint with the lowest validation loss.
+
+For multi-GPU training, expose the desired devices and set one process per
+visible GPU:
 
 ```bash
-CUDA_VISIBLE_DEVICES=0,1,2,3 torchrun \
-  --standalone \
-  --nproc_per_node=4 \
-  train.py \
-  --data-dir /data4/tkp/MPH-Data/voxel_output \
-  --vae-checkpoint /data4/tkp/Code/EventVAE/outputs_latent64/best.pt \
-  --output-dir outputs_motion_ddp \
-  --cond-frames 3 \
-  --pred-frames 25 \
-  --use-laser-power \
-  --laser-power-max 200 \
-  --batch-size 1 \
-  --num-workers 4 \
-  --epochs 50
+CUDA_VISIBLE_DEVICES=0,1 NPROC_PER_NODE=2 bash train.sh
 ```
 
-`--batch-size` is per process/GPU. The effective batch size is
-`batch-size * nproc_per_node`.
+The batch size is per process, so the effective global batch size is
+`batch_size × NPROC_PER_NODE`.
 
-For a lighter smoke run:
-
-```bash
-python train.py --epochs 1 --max-windows-per-file 8 --batch-size 1 --num-workers 0
-```
-
-Laser-power conditioning is enabled by default. Add `--no-use-laser-power`
-to train the older event-history-only model. The power values are normalized
-from `[--laser-power-min, --laser-power-max]` to `[-1, 1]`; the current MPH
-data spans `0` to `200`.
-
-## Validate And Evaluate
-
-Training automatically evaluates the validation split after every epoch and
-uses its loss to select `best.pt`. To evaluate that checkpoint on the held-out
-test split and optionally render qualitative results:
+## Evaluation
 
 ```bash
 python test.py \
-  --checkpoint outputs_motion/best.pt \
-  --output-dir outputs_motion/test \
+  --checkpoint outputs/eventdiff/best.pt \
+  --output-dir outputs/eventdiff/test \
   --num-samples 8 \
   --num-steps 25 \
   --guidance-scale 1.5
 ```
 
-Visualization defaults to a light background with automatic percentile clipping,
-which is easier to inspect for sparse event frames. To force the old dark fixed
-scale style, add:
+Evaluation uses the held-out recordings stored in the checkpoint. It reports
+normalized and original-domain errors, activity statistics, and optionally
+saves compressed predictions, comparison images, and videos. Prefix-guided
+sampling is controlled with `--known-future-frames` and
+`--event-guided-steps`.
 
-```bash
---vis-theme dark --vis-clip-mode fixed --vis-clip-value 100
+## Paper Configuration
+
+The main settings used in the paper are:
+
+- event voxels with 3 temporal channels at `512 × 512` resolution;
+- 3 observation frames and 25 prediction frames;
+- frozen EventVAE posterior means with `16 × 64 × 64` latent maps;
+- AdamW, mixed precision, gradient clipping, and validation-based checkpoint
+  selection;
+- 25-step Euler sampling with a Karras noise schedule and classifier-free
+  guidance.
+
+Hardware capacity and dataset locations are environment-specific; adjust batch
+size and worker count without editing source files.
+
+## Citation
+
+If this repository is useful in your research, please cite:
+
+```bibtex
+@article{tan2026eventdiff,
+  title   = {Process-Conditioned Diffusion for Forecasting Melt-Pool Dynamics
+             via Event-based Sensing in Laser Wire Directed Energy Deposition},
+  author  = {Tan, Kunpeng and Yang, Ao and Zhang, Huaqing and Yuan, Runze and
+             Wang, Chenxi and Zhang, Xingwu and Zhao, Zhibin},
+  year    = {2026},
+  note    = {Preprint}
+}
 ```
-
-Outputs include metrics JSON, compressed `.npz` condition/target/prediction
-pairs, comparison PNGs, and side-by-side AVI videos.

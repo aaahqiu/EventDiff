@@ -8,6 +8,7 @@ without loading whole recordings into RAM.
 from __future__ import annotations
 
 import math
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Sequence
@@ -18,7 +19,9 @@ import torch.nn.functional as F
 from torch.utils.data import DataLoader, Dataset, Sampler
 
 
-DEFAULT_DATA_DIR = Path("/data4/tkp/MPH-Data/voxel_output")
+DEFAULT_DATA_DIR = Path(
+    os.environ.get("EVENTDIFF_DATA_DIR", "data/voxel_output")
+).expanduser()
 
 
 class SignedLogNormalizer:
